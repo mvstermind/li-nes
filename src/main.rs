@@ -1,12 +1,14 @@
-// Import necessary libraries
 use std::collections::HashMap; // For storing line counts by file extension
 use std::fs; // For file system operations
 use std::io::{self, BufRead}; // For reading files and handling input/output
+use std::time::Instant;
 use std::{env, path::Path}; // For handling command-line arguments and paths
 use term_size; // For getting terminal dimensions to center output
 
 fn main() -> Result<(), io::Error> {
     // Collect command-line arguments into a vector
+    let time_start = Instant::now();
+
     let args: Vec<String> = env::args().collect();
 
     // Check if the directory path argument is provided
@@ -21,14 +23,21 @@ fn main() -> Result<(), io::Error> {
     // Read files from the specified directory and count lines by file extension
     let line_counts = read_files_from_dir(dir_path)?;
 
+    // Calculate total lines
+    let total_lines: usize = line_counts.values().sum();
+
     // Prepare the output lines for the table
     let mut output = Vec::new();
-    output.push("╔═════════════════════════╗".to_string()); // Table top border
+    output.push("\n".to_string());
+    output.push("BLAZINGLY FAST LINE COUNTER".to_string());
+    output.push("╔═════════════════════════╗".to_string());
     for (ext, count) in &line_counts {
         // Format each line of the table with file extension and line count
         output.push(format!("║ {:<13} ║ {:>7} ║", ext, count));
     }
-    output.push("╚═════════════════════════╝".to_string()); // Table bottom border
+    // Add the total line count
+    output.push(format!("║ {:<13} ║ {:>7} ║", "TOTAL", total_lines));
+    output.push("╚═════════════════════════╝".to_string());
 
     // Find the length of the longest line for centering
     let max_line_length = output.iter().map(|line| line.len()).max().unwrap_or(0);
@@ -47,6 +56,9 @@ fn main() -> Result<(), io::Error> {
         }
     }
 
+    let time_end = Instant::now();
+    let time_diff = time_end.duration_since(time_start);
+    println!("This took: {:?}", time_diff);
     Ok(())
 }
 
