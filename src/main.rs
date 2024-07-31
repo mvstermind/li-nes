@@ -1,26 +1,90 @@
-use std::fs;
-use std::io;
-use std::{env, path::Path};
+// Import necessary libraries
+use std::collections::HashMap; // For storing line counts by file extension
+use std::fs; // For file system operations
+use std::io::{self, BufRead}; // For reading files and handling input/output
+use std::{env, path::Path}; // For handling command-line arguments and paths
+use term_size; // For getting terminal dimensions to center output
 
 fn main() -> Result<(), io::Error> {
+    // Collect command-line arguments into a vector
     let args: Vec<String> = env::args().collect();
 
+    // Check if the directory path argument is provided
     if args.len() < 2 {
-        eprint!("Usage: {} <directory_path>", args[0]);
+        eprintln!("Usage: {} <directory_path>", args[0]);
+        return Ok(());
     }
-    let file_path = Path::new(&args[1]);
-    read_files_from_dir(file_path)
+
+    // Get the directory path from the command-line arguments
+    let dir_path = Path::new(&args[1]);
+
+    // Read files from the specified directory and count lines by file extension
+    let line_counts = read_files_from_dir(dir_path)?;
+
+    // Prepare the output lines for the table
+    let mut output = Vec::new();
+    output.push("╔═════════════════════════╗".to_string()); // Table top border
+    for (ext, count) in &line_counts {
+        // Format each line of the table with file extension and line count
+        output.push(format!("║ {:<13} ║ {:>7} ║", ext, count));
+    }
+    output.push("╚═════════════════════════╝".to_string()); // Table bottom border
+
+    // Find the length of the longest line for centering
+    let max_line_length = output.iter().map(|line| line.len()).max().unwrap_or(0);
+
+    // Get the terminal width to center the output
+    if let Some((width, _)) = term_size::dimensions() {
+        for line in output {
+            // Calculate padding for centering the output
+            let padding = (width.saturating_sub(max_line_length)) / 2;
+            println!("{:padding$}{}", "", line, padding = padding);
+        }
+    } else {
+        // If terminal size can't be determined, print without centering
+        for line in output {
+            println!("{}", line);
+        }
+    }
+
+    Ok(())
 }
 
-fn read_files_from_dir(dir: &Path) -> io::Result<()> {
+// Function to read files from the directory and count lines by extension
+fn read_files_from_dir(dir: &Path) -> io::Result<HashMap<String, usize>> {
+    let mut line_counts = HashMap::new(); // Create a HashMap to store line counts
+
     if dir.is_dir() {
+        // Iterate over each entry in the directory
         for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            let path = entry.path();
+            let entry = entry?; // Get the directory entry
+            let path = entry.path(); // Get the path of the entry
+
             if path.is_file() {
-                println!("File: {:?}", path);
+                // If the entry is a file, process it
+                if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+                    let ext = ext.to_string(); // Get the file extension as a string
+                    let count = count_lines_in_file(&path)?; // Count lines in the file
+                    *line_counts.entry(ext).or_insert(0) += count; // Update line count for the extension
+                }
+            } else if path.is_dir() {
+                // If the entry is a directory, recursively process it
+                let sub_dir_counts = read_files_from_dir(&path)?;
+                for (ext, count) in sub_dir_counts {
+                    *line_counts.entry(ext).or_insert(0) += count; // Update line counts from subdirectories
+                }
             }
         }
     }
-    Ok(())
+
+    Ok(line_counts)
 }
+
+// Function to count the number of lines in a file
+fn count_lines_in_file(file_path: &Path) -> io::Result<usize> {
+    let file = fs::File::open(file_path)?; // Open the file
+    let reader = io::BufReader::new(file); // Create a buffered reader
+    let count = reader.lines().count(); // Count the number of lines in the file
+    Ok(count)
+}
+
